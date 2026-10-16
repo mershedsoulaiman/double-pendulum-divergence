@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Double Pendulum Divergence</title>
+<style>
+  :root {
+    --surface: #ffffff; --panel: #f6f6f4; --ink: #0b0b0b; --ink2: #52514e; --muted: #8a8984;
+    --line: #e5e4df; --blue: #2a78d6; --red: #d0342c; --warn: #b34700;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink);
+         font: 15px/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lede { margin: 0 0 18px; color: var(--ink2); max-width: 70ch; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  canvas { width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 14px; padding: 10px 12px 12px; background: var(--panel); }
+  legend { font-weight: 600; padding: 0 4px; }
+  label { display: grid; grid-template-columns: 9.5em 1fr; align-items: center; gap: 8px; margin: 6px 0; }
+  input[type=text], select { font: inherit; padding: 4px 6px; border: 1px solid #c9c8c2; border-radius: 4px; width: 100%; background: #fff; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 14px; border: 1px solid #c9c8c2; border-radius: 4px; background: #fff; cursor: pointer; }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--ink2); } dd { margin: 0; }
+  .warn { color: var(--warn); }
+  .note { color: var(--ink2); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Double pendulum divergence</h1>
+  <p class="lede">Two pendulums released from rest. Change one angle by a millionth of a degree and watch
+    when they part. The energy readout is the check on the arithmetic: a real pendulum's energy cannot change.</p>
+  <div class="wrap">
+    <canvas id="c" width="600" height="600" aria-label="Two double pendulums, blue and red"></canvas>
+    <div>
+      <div class="row">
+        <button id="run" class="primary">Start</button>
+        <button id="reset">Restart</button>
+        <button id="png">Save PNG</button>
+      </div>
+      <fieldset>
+        <legend><span class="dot" style="background:var(--blue)"></span>Blue</legend>
+        <label>θ₁ (degrees)<input type="text" id="b1" value="120"></label>
+        <label>θ₂ (degrees)<input type="text" id="b2" value="120"></label>
+      </fieldset>
+      <fieldset>
+        <legend><span class="dot" style="background:var(--red)"></span>Red</legend>
+        <label>θ₁ (degrees)<input type="text" id="r1" value="120.000001"></label>
+        <label>θ₂ (degrees)<input type="text" id="r2" value="120"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Model</legend>
+        <label>Pendulum<select id="model">
+          <option value="masses">Point masses on light rods</option>
+          <option value="rods">Uniform rods</option>
+        </select></label>
+        <label>Integration<select id="method">
+          <option value="rk4">Accurate (RK4)</option>
+          <option value="site">Forward Euler, as visualize-it</option>
+        </select></label>
+        <label>Speed<select id="speed">
+          <option value="0.25">1 swing per 4 s</option>
+          <option value="0.5" selected>1 swing per 2 s</option>
+          <option value="1">1 swing per second</option>
+        </select></label>
+      </fieldset>
+      <fieldset>
+        <legend>Readout</legend>
+        <dl>
+          <dt>Time</dt><dd id="t">0.0 swings</dd>
+          <dt>Gap</dt><dd id="g">0 rad</dd>
+          <dt>Energy, blue</dt><dd id="eb">0%</dd>
+          <dt>Energy, red</dt><dd id="er">0%</dd>
+        </dl>
+        <p class="note">Gap: distance between the two pendulums in angle space; "apart" is one radian.
+          Energy: change since release, as a share of the pendulum's depth below the pivot.
+          One swing = 2π√(l/g). Changing any setting restarts.</p>
+      </fieldset>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+// Dimensionless units: g = l = m = 1. Angles from the downward vertical.
+const T0 = 2 * Math.PI, H = 0.002;
+const SITE_STEP = 0.1 * Math.sqrt(9.81 / (0.2 * 0.45 * 1366));   // visualize-it on a 1366 px screen
+
+const models = {
+  masses: {
+    f([t1, t2, w1, w2]) {
+      const d = t1 - t2, den = 3 - Math.cos(2 * d);
+      return [w1, w2,
+        (-3 * Math.sin(t1) - Math.sin(t1 - 2 * t2) - 2 * Math.sin(d) * (w2 * w2 + w1 * w1 * Math.cos(d))) / den,
+        (2 * Math.sin(d) * (2 * w1 * w1 + 2 * Math.cos(t1) + w2 * w2 * Math.cos(d))) / den];
+    },
+    E([t1, t2, w1, w2]) { return w1 * w1 + 0.5 * w2 * w2 + w1 * w2 * Math.cos(t1 - t2) - 2 * Math.cos(t1) - Math.cos(t2); },
+    depth: 3,
+  },
+  rods: {
+    f([t1, t2, w1, w2]) {
+      const d = t1 - t2, cd = Math.cos(d), sd = Math.sin(d), det = 16 - 9 * cd * cd;
+      const r1 = -3 * w2 * w2 * sd - 9 * Math.sin(t1), r2 = 3 * w1 * w1 * sd - 3 * Math.sin(t2);
+      return [w1, w2, (2 * r1 - 3 * cd * r2) / det, (8 * r2 - 3 * cd * r1) / det];
+    },
+    E([t1, t2, w1, w2]) { return (w2 * w2 + 4 * w1 * w1 + 3 * w1 * w2 * Math.cos(t1 - t2)) / 6 - 0.5 * (3 * Math.cos(t1) + Math.cos(t2)); },
+    depth: 2,
+  },
+  // visualize-it's own form of the rods: state (θ1, θ2, p1, p2)
+  site: {
+    f([t1, t2, p1, p2]) {
+      const d = t1 - t2, cd = Math.cos(d), den = 16 - 9 * cd * cd;
+      const w1 = 6 * (2 * p1 - 3 * cd * p2) / den, w2 = 6 * (8 * p2 - 3 * cd * p1) / den;
+      return [w1, w2, -0.5 * (w1 * w2 * Math.sin(d) + 3 * Math.sin(t1)), -0.5 * (-w1 * w2 * Math.sin(d) + Math.sin(t2))];
+    },
+    E(s) { const [w1, w2] = models.site.f(s); return 0.5 * (w1 * s[2] + w2 * s[3]) - 0.5 * (3 * Math.cos(s[0]) + Math.cos(s[1])); },
+    depth: 2,
+  },
+};
+
+function rk4(f, s, h) {
+  const k1 = f(s), k2 = f(s.map((x, i) => x + h / 2 * k1[i])),
+        k3 = f(s.map((x, i) => x + h / 2 * k2[i])), k4 = f(s.map((x, i) => x + h * k3[i]));
+  return s.map((x, i) => x + h / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+}
+function euler(f, s, h) { const k = f(s); return s.map((x, i) => x + h * k[i]); }
+
+const $ = id => document.getElementById(id);
+const cv = $("c"), ctx = cv.getContext("2d");
+const css = getComputedStyle(document.documentElement);
+const C = n => css.getPropertyValue(n).trim();
+let st, running = false, last = null, carry = 0;
+
+function deg(id) { const v = parseFloat($(id).value); return Number.isFinite(v) ? v * Math.PI / 180 : 0; }
+function setup() {
+  const site = $("method").value === "site";
+  if (site) $("model").value = "rods";
+  $("model").disabled = site;
+  const m = site ? models.site : models[$("model").value];
+  const a = [deg("b1"), deg("b2"), 0, 0], b = [deg("r1"), deg("r2"), 0, 0];
+  st = { m, site, a, b, t: 0, Ea: m.E(a), Eb: m.E(b), ta: [], tb: [] };
+  carry = 0; draw(ctx, cv.width / 600); readout();
+}
+
+function advance(dtUnits) {
+  const { m, site } = st;
+  if (site) {                                   // one site frame = one Euler step
+    carry += dtUnits;
+    while (carry >= SITE_STEP) { st.a = euler(m.f, st.a, SITE_STEP); st.b = euler(m.f, st.b, SITE_STEP); st.t += SITE_STEP; carry -= SITE_STEP; trailPush(); }
+  } else {
+    const n = Math.max(1, Math.ceil(dtUnits / H)), h = dtUnits / n;
+    for (let i = 0; i < n; i++) { st.a = rk4(m.f, st.a, h); st.b = rk4(m.f, st.b, h); st.t += h; if (i % 5 === 0) trailPush(); }
+  }
+}
+function tip(s) { return [Math.sin(s[0]) + Math.sin(s[1]), Math.cos(s[0]) + Math.cos(s[1])]; }
+function trailPush() {
+  st.ta.push([st.t, tip(st.a)]); st.tb.push([st.t, tip(st.b)]);
+  while (st.ta.length && st.ta[0][0] < st.t - T0) { st.ta.shift(); st.tb.shift(); }
+}
+
+function draw(g, scale) {
+  const W = 600, cx = 300, cy = 300, L = 120;
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.fillStyle = C("--surface"); g.fillRect(0, 0, W, W);
+  const path = (pts, col) => {
+    if (pts.length < 2) return;
+    g.beginPath(); pts.forEach(([, [x, y]], i) => (i ? g.lineTo : g.moveTo).call(g, cx + L * x, cy + L * y));
+    g.strokeStyle = col; g.globalAlpha = 0.45; g.lineWidth = 1.6; g.stroke(); g.globalAlpha = 1;
+  };
+  path(st.ta, C("--blue")); path(st.tb, C("--red"));
+  const pend = (s, col, w, r) => {
+    const x1 = cx + L * Math.sin(s[0]), y1 = cy + L * Math.cos(s[0]);
+    const x2 = x1 + L * Math.sin(s[1]), y2 = y1 + L * Math.cos(s[1]);
+    g.strokeStyle = col; g.lineWidth = w; g.lineCap = g.lineJoin = "round";
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    g.fillStyle = col; [[x1, y1], [x2, y2]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, r, 0, 2 * Math.PI); g.fill(); });
+  };
+  pend(st.a, C("--blue"), 7, 10); pend(st.b, C("--red"), 3, 6);       // blue wide underneath: overlap stays visible
+  g.strokeStyle = C("--ink"); g.lineWidth = 2; g.beginPath(); g.moveTo(cx - 22, cy); g.lineTo(cx + 22, cy); g.stroke();
+  g.fillStyle = C("--ink"); g.beginPath(); g.arc(cx, cy, 4, 0, 2 * Math.PI); g.fill();
+  g.fillStyle = C("--ink2"); g.font = "14px Helvetica Neue, Helvetica, Arial, sans-serif";
+  g.fillText(`after ${(st.t / T0).toFixed(1)} swings`, 24, W - 24);
+}
+
+function readout() {
+  const gap = Math.hypot(st.a[0] - st.b[0], st.a[1] - st.b[1]);
+  const pct = (s, E0) => (100 * (st.m.E(s) - E0) / st.m.depth);
+  $("t").textContent = `${(st.t / T0).toFixed(1)} swings`;
+  $("g").textContent = gap < 1e-3 ? `${gap.toExponential(1)} rad` : `${gap.toFixed(3)} rad${gap >= 1 ? " — apart" : ""}`;
+  for (const [id, s, E0] of [["eb", st.a, st.Ea], ["er", st.b, st.Eb]]) {
+    const p = pct(s, E0), el = $(id);
+    el.textContent = p === 0 ? "0%" : `${p > 0 ? "+" : ""}${Math.abs(p) < 0.01 ? p.toExponential(1) : p.toFixed(2)}%`;
+    el.className = Math.abs(p) > 1 ? "warn" : "";
+  }
+}
+
+function frame(now) {
+  if (!running) { last = null; return; }
+  if (last !== null) advance(Math.min(0.05, (now - last) / 1000) * T0 * parseFloat($("speed").value));
+  last = now; draw(ctx, cv.width / 600); readout();
+  requestAnimationFrame(frame);
+}
+
+function fitCanvas() {
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
+  cv.width = cv.height = Math.round(600 * ratio);
+  if (st) draw(ctx, ratio);
+}
+
+$("run").onclick = () => { running = !running; $("run").textContent = running ? "Pause" : "Start"; if (running) requestAnimationFrame(frame); };
+$("reset").onclick = () => { setup(); };
+$("png").onclick = () => {
+  const off = document.createElement("canvas"); off.width = off.height = 1800;
+  draw(off.getContext("2d"), 3);
+  const a = document.createElement("a");
+  a.download = `pendulums-${(st.t / T0).toFixed(1)}-swings.png`; a.href = off.toDataURL("image/png"); a.click();
+};
+for (const id of ["b1", "b2", "r1", "r2", "model", "method"]) $(id).addEventListener("change", () => { running = false; $("run").textContent = "Start"; setup(); });
+window.addEventListener("resize", fitCanvas);
+fitCanvas(); setup();
+</script>
+</body>
+</html>

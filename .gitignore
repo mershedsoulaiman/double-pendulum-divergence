@@ -1,0 +1,5 @@
+# the site's own files, fetched by site-check/README.md; not ours to commit
+site-check/pendulum.js
+site-check/simulation.js
+__pycache__/
+*.pyc
