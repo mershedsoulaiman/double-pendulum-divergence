@@ -105,8 +105,21 @@ Colours: blue `#2a78d6` and red `#d0342c` for the two pendulums, as the book nam
 checked for colour-blind separation. Where the two pendulums coincide, blue is drawn wider
 underneath red, so both stay visible.
 
+## Source for the equations
+
+The point-mass model is checked against Jiménez-López & García-Garrido (2024), *International
+Journal of Bifurcation and Chaos* 34(16), doi:10.1142/S0218127424502018 (open preprint
+arXiv:2403.07000, eqs. 8 and 15). Their kinetic and potential energy reduce to ours with equal
+masses and arms, and the equations of motion derived from them agree with `pendulum/model.py`
+to 1e-14 at 100,000 random states: `python tests/check_source.py`. The over-the-top condition
+follows from their potential energy. Checked 2026-10-17.
+
+Also cited for the double pendulum, not read (paywalled): Shinbrot et al. (1992), *Am. J.
+Phys.* 60, 491–499, doi:10.1119/1.16860; Levien & Tan (1993), *Am. J. Phys.* 61, 1038,
+doi:10.1119/1.17335.
+
 ## Still to do
 
-- The appendix text itself, and a published source for the equations (candidates, not yet
-  read: Shinbrot et al. 1992 and Levien & Tan 1993, both *American Journal of Physics*).
+- The appendix text itself.
+- The rods model has no published source checked yet; it matters only for the site check.
 - Lyapunov exponents proper, if the appendix needs a rate rather than a table.
