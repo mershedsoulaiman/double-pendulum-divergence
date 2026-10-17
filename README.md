@@ -2,10 +2,10 @@
 
 Companion to the *Chaos Theory* passage of *Neuroplastogenics*, Volume Two of *The Trilogy of
 Mind* (Soulaiman Bassam Mershed). It produces the figures for that passage and every number
-behind them, so a specialist reader can check the mathematics. It will become the basis of the
-book's technical appendix.
+behind them, so a specialist reader can check the mathematics. The book's appendix, *The
+Mathematics Behind the Double Pendulum*, is built on it.
 
-**Private.** No licence yet: all rights reserved.
+No licence yet: all rights reserved. Reading and running the code to check the book is welcome.
 
 ## The claim, and what checking it found
 
