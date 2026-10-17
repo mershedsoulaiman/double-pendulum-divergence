@@ -5,7 +5,8 @@ Mind* (Soulaiman Bassam Mershed). It produces the figures for that passage and e
 behind them, so a specialist reader can check the mathematics. The book's appendix, *The
 Mathematics Behind the Double Pendulum*, is built on it.
 
-No licence yet: all rights reserved. Reading and running the code to check the book is welcome.
+**Licences:** the code is MIT (`LICENSE`); the figures and results are CC BY 4.0
+(`figures/LICENSE.md`).
 
 ## The claim, and what checking it found
 
